@@ -1,1 +1,93 @@
+name: Selenium UI Tests
 
+on:
+  push:
+    branches:
+      - main # Kích hoạt workflow khi có push lên nhánh 'main'
+  pull_request:
+    branches:
+      - main # Kích hoạt workflow khi có Pull Request vào nhánh 'main'
+
+jobs:
+  run-selenium-tests:
+    runs-on: ubuntu-latest # Sử dụng runner Ubuntu mới nhất
+
+    steps:
+      - name: Checkout code # Bước 1: Tải mã nguồn của bạn
+        uses: actions/checkout@v4
+
+      - name: Set up Python # Bước 2: Cài đặt môi trường Python
+        uses: actions/setup-python@v5 # Sử dụng action setup-python phiên bản 5
+        with:
+          python-version: '3.x' # Sử dụng phiên bản Python 3.x mới nhất
+
+      - name: Install Selenium and other dependencies # Bước 3: Cài đặt thư viện Selenium và ChromeDriver
+        run: |
+          python -m pip install --upgrade pip
+          pip install selenium # Cài đặt thư viện Selenium
+          # Cài đặt ChromeDriver. Ubuntu-latest thường đã có Chrome pre-installed.
+          # Webdriver-manager sẽ tự động tải phiên bản ChromeDriver phù hợp.
+          pip install webdriver-manager
+
+      - name: Create Selenium Script File # Bước 4: Tạo file script Selenium từ nội dung của bạn
+        run: |
+          cat <<EOF > selenium_script.py
+          from selenium import webdriver
+          from selenium.webdriver.common.by import By
+          from selenium.webdriver.support.ui import WebDriverWait
+          from selenium.webdriver.support import expected_conditions as EC
+          from selenium.webdriver.chrome.service import Service
+          from webdriver_manager.chrome import ChromeDriverManager
+          import time # Thêm thư viện time để tạm dừng nếu cần
+
+          # Khởi động trình duyệt Chrome
+          # Sử dụng ChromeDriverManager để tự động quản lý ChromeDriver
+          service = Service(ChromeDriverManager().install())
+          driver = webdriver.Chrome(service=service)
+
+          # Mở trang web
+          driver.get("https://demoqa.com/automation-practice-form")
+
+          # Chờ tối đa 10 giây để phần tử xuất hiện
+          wait = WebDriverWait(driver, 10)
+
+          try:
+              # Tìm ô nhập "First Name" sau khi đảm bảo nó đã xuất hiện
+              name_field = wait.until(EC.presence_of_element_located((By.XPATH, "//*[@id='firstName']")))
+              name_field.send_keys("Nguyen Van A")
+              print("Điền First Name thành công.")
+
+              # Điền vào ô "Last Name"
+              last_name_field = wait.until(EC.presence_of_element_located((By.XPATH,"//*[@id='lastName']")))
+              last_name_field.send_keys("Test")
+              print("Điền Last Name thành công.")
+
+              # Điền vào ô "Email"
+              email_field = driver.find_element(By.XPATH, "//*[@id='userEmail']")
+              email_field.send_keys("testemail@example.com")
+              print("Điền Email thành công.")
+
+              # Điền vào ô "Mobile Number"
+              phone_field = driver.find_element(By.XPATH, "//*[@id='userNumber']")
+              phone_field.send_keys("0123456789")
+              print("Điền Mobile Number thành công.")
+
+              # Đôi khi cần một khoảng dừng nhỏ để quan sát hoặc đảm bảo hành động được xử lý
+              time.sleep(2)
+              print("Hoàn thành điền form.")
+
+          except Exception as e:
+              print(f"Lỗi xảy ra trong quá trình tương tác: {e}")
+              driver.save_screenshot("error_screenshot.png") # Chụp ảnh màn hình khi có lỗi
+              print("Đã chụp ảnh màn hình lỗi: error_screenshot.png")
+              exit(1) # Thoát với mã lỗi nếu có lỗi
+
+          finally:
+              # Đóng trình duyệt sau khi hoàn thành
+              driver.quit()
+              print("Đã đóng trình duyệt.")
+
+          EOF
+
+      - name: Run Selenium Script # Bước 5: Chạy script Python Selenium
+        run: python selenium_script.py

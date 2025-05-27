@@ -1,36 +1,44 @@
+# Tên của workflow này sẽ hiển thị trên giao diện GitHub Actions
 name: Selenium UI Tests
 
+# Định nghĩa các sự kiện sẽ kích hoạt workflow này
 on:
   push:
     branches:
-      - main # Kích hoạt workflow khi có push lên nhánh 'main'
+      - main # Kích hoạt workflow khi có commit được push lên nhánh 'main'
+      - master # Hoặc nhánh 'master' nếu đó là nhánh chính của bạn
   pull_request:
     branches:
-      - main # Kích hoạt workflow khi có Pull Request vào nhánh 'main'
+      - main # Kích hoạt workflow khi có Pull Request được mở hoặc cập nhật vào nhánh 'main'
+      - master # Hoặc nhánh 'master' nếu đó là nhánh chính của bạn
 
+# Định nghĩa các công việc (jobs) trong workflow
 jobs:
   run-selenium-tests:
-    runs-on: ubuntu-latest # Sử dụng runner Ubuntu mới nhất
+    runs-on: ubuntu-latest # Chạy job này trên một runner Ubuntu phiên bản mới nhất
 
     steps:
-      - name: Checkout code # Bước 1: Tải mã nguồn của bạn
-        uses: actions/checkout@v4
+      - name: Checkout code # Bước 1: Tải mã nguồn của bạn từ repository
+        uses: actions/checkout@v4 # Sử dụng action checkout phiên bản 4
 
-      - name: Set up Python # Bước 2: Cài đặt môi trường Python
+      - name: Set up Python # Bước 2: Cài đặt môi trường Python trên runner
         uses: actions/setup-python@v5 # Sử dụng action setup-python phiên bản 5
         with:
-          python-version: '3.x' # Sử dụng phiên bản Python 3.x mới nhất
+          python-version: '3.x' # Sử dụng phiên bản Python 3.x mới nhất (ví dụ: 3.9, 3.10, 3.11)
 
-      - name: Install Selenium and other dependencies # Bước 3: Cài đặt thư viện Selenium và ChromeDriver
+      - name: Install Python dependencies # Bước 3: Cài đặt các thư viện Python cần thiết cho Selenium và Pytest
         run: |
-          python -m pip install --upgrade pip
-          pip install selenium # Cài đặt thư viện Selenium
-          # Cài đặt ChromeDriver. Ubuntu-latest thường đã có Chrome pre-installed.
-          # Webdriver-manager sẽ tự động tải phiên bản ChromeDriver phù hợp.
-          pip install webdriver-manager
+          python -m pip install --upgrade pip # Nâng cấp pip lên phiên bản mới nhất
+          pip install selenium # Cài đặt thư viện Selenium WebDriver
+          pip install webdriver-manager # Cài đặt thư viện để tự động quản lý ChromeDriver
+          pip install pytest # Cài đặt pytest (nếu bạn sử dụng nó để chạy các bài kiểm thử)
+          pip install HtmlTestRunner # Cài đặt HtmlTestRunner (nếu bạn sử dụng nó cho báo cáo)
+          # Nếu bạn có file requirements.txt, bạn có thể thay thế các dòng trên bằng:
+          # pip install -r requirements.txt
 
-      - name: Create Selenium Script File # Bước 4: Tạo file script Selenium từ nội dung của bạn
+      - name: Create and Run Selenium Script # Bước 4: Tạo file script Selenium và thực thi nó
         run: |
+          # Tạo một file Python mới có tên 'selenium_script.py' với nội dung script của bạn
           cat <<EOF > selenium_script.py
           from selenium import webdriver
           from selenium.webdriver.common.by import By
@@ -38,15 +46,28 @@ jobs:
           from selenium.webdriver.support import expected_conditions as EC
           from selenium.webdriver.chrome.service import Service
           from webdriver_manager.chrome import ChromeDriverManager
-          import time # Thêm thư viện time để tạm dừng nếu cần
+          import time # Thêm thư viện time để tạm dừng nếu cần cho debugging hoặc quan sát
+
+          # Cấu hình Chrome Options để chạy ở chế độ headless (không có giao diện người dùng)
+          # Điều này là cần thiết trên môi trường CI/CD không có màn hình hiển thị
+          chrome_options = webdriver.ChromeOptions()
+          chrome_options.add_argument("--headless") # Chạy Chrome ở chế độ không giao diện
+          chrome_options.add_argument("--no-sandbox") # Bắt buộc cho môi trường Linux (như Ubuntu runner)
+          chrome_options.add_argument("--disable-dev-shm-usage") # Khắc phục lỗi bộ nhớ trong Docker/CI
 
           # Khởi động trình duyệt Chrome
-          # Sử dụng ChromeDriverManager để tự động quản lý ChromeDriver
-          service = Service(ChromeDriverManager().install())
-          driver = webdriver.Chrome(service=service)
+          # Sử dụng ChromeDriverManager để tự động tải và cài đặt ChromeDriver phù hợp
+          try:
+              service = Service(ChromeDriverManager().install())
+              driver = webdriver.Chrome(service=service, options=chrome_options)
+              print("Trình duyệt Chrome đã được khởi động thành công.")
+          except Exception as e:
+              print(f"Lỗi khi khởi động trình duyệt: {e}")
+              exit(1) # Thoát với mã lỗi nếu không khởi động được trình duyệt
 
           # Mở trang web
           driver.get("https://demoqa.com/automation-practice-form")
+          print(f"Đã mở trang web: {driver.current_url}")
 
           # Chờ tối đa 10 giây để phần tử xuất hiện
           wait = WebDriverWait(driver, 10)
@@ -55,32 +76,32 @@ jobs:
               # Tìm ô nhập "First Name" sau khi đảm bảo nó đã xuất hiện
               name_field = wait.until(EC.presence_of_element_located((By.XPATH, "//*[@id='firstName']")))
               name_field.send_keys("Nguyen Van A")
-              print("Điền First Name thành công.")
+              print("Đã điền First Name.")
 
               # Điền vào ô "Last Name"
               last_name_field = wait.until(EC.presence_of_element_located((By.XPATH,"//*[@id='lastName']")))
               last_name_field.send_keys("Test")
-              print("Điền Last Name thành công.")
+              print("Đã điền Last Name.")
 
               # Điền vào ô "Email"
               email_field = driver.find_element(By.XPATH, "//*[@id='userEmail']")
               email_field.send_keys("testemail@example.com")
-              print("Điền Email thành công.")
+              print("Đã điền Email.")
 
               # Điền vào ô "Mobile Number"
               phone_field = driver.find_element(By.XPATH, "//*[@id='userNumber']")
               phone_field.send_keys("0123456789")
-              print("Điền Mobile Number thành công.")
+              print("Đã điền Mobile Number.")
 
               # Đôi khi cần một khoảng dừng nhỏ để quan sát hoặc đảm bảo hành động được xử lý
-              time.sleep(2)
+              time.sleep(3) # Tạm dừng 3 giây để bạn có thể thấy kết quả trong log nếu cần
               print("Hoàn thành điền form.")
 
           except Exception as e:
-              print(f"Lỗi xảy ra trong quá trình tương tác: {e}")
+              print(f"Lỗi xảy ra trong quá trình tương tác với form: {e}")
               driver.save_screenshot("error_screenshot.png") # Chụp ảnh màn hình khi có lỗi
               print("Đã chụp ảnh màn hình lỗi: error_screenshot.png")
-              exit(1) # Thoát với mã lỗi nếu có lỗi
+              exit(1) # Thoát với mã lỗi nếu có lỗi trong quá trình tương tác
 
           finally:
               # Đóng trình duyệt sau khi hoàn thành
@@ -88,6 +109,13 @@ jobs:
               print("Đã đóng trình duyệt.")
 
           EOF
+          # Thực thi file script Python vừa tạo
+          python selenium_script.py
 
-      - name: Run Selenium Script # Bước 5: Chạy script Python Selenium
-        run: python selenium_script.py
+      - name: Upload error screenshot (if exists) # Bước 5: Tải lên ảnh chụp màn hình lỗi nếu có
+        if: always() # Luôn chạy bước này, ngay cả khi các bước trước đó thất bại
+        uses: actions/upload-artifact@v4 # Sử dụng action upload-artifact phiên bản 4
+        with:
+          name: error-screenshot
+          path: error_screenshot.png
+          if-no-files-found: ignore # Bỏ qua nếu không tìm thấy file
